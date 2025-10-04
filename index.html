@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Flappy Bird</title>
+  <style>
+    body { margin: 0; background: #70c5ce; font-family: Arial; }
+    canvas { display: block; margin: auto; background: #70c5ce; }
+    #menu, #settings, #login { text-align: center; margin-top: 20px; }
+    button { margin: 5px; padding: 10px 20px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h2 style="text-align:center;">🐤 Flappy Bird</h2>
+
+  <!-- Đăng nhập -->
+  <div id="login">
+    <h3>Đăng nhập / Đăng ký</h3>
+    <input id="username" placeholder="Tên tài khoản"><br><br>
+    <input id="password" type="password" placeholder="Mật khẩu"><br><br>
+    <button onclick="register()">Đăng ký</button>
+    <button onclick="login()">Đăng nhập</button>
+    <p id="loginMsg"></p>
+  </div>
+
+  <!-- Menu chính -->
+  <div id="menu" style="display:none;">
+    <p id="welcome"></p>
+    <button onclick="startGame()">Chơi ngay</button>
+    <button onclick="openSettings()">⚙️ Cài đặt</button>
+    <p>Điểm cao nhất: <span id="highScore">0</span></p>
+  </div>
+
+  <!-- Cài đặt -->
+  <div id="settings" style="display:none;">
+    <h3>Cài đặt tốc độ</h3>
+    <label>Tốc độ ống: <input type="number" id="pipeSpeed" value="2"></label>
+    <br><br>
+    <button onclick="saveSettings()">Lưu</button>
+    <button onclick="backMenu()">Trở về Menu</button>
+  </div>
+
+  <!-- Game -->
+  <canvas id="gameCanvas" width="400" height="600" style="display:none;"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let bird, pipes, frame, score, pipeSpeed = 2;
+    let currentUser = null;
+
+    // ============ QUẢN LÝ TÀI KHOẢN ============
+    function register() {
+      const user = document.getElementById("username").value.trim();
+      const pass = document.getElementById("password").value.trim();
+      if (!user || !pass) return alert("Nhập đủ tài khoản và mật khẩu!");
+
+      if (localStorage.getItem("user_" + user)) {
+        alert("Tài khoản đã tồn tại!");
+        return;
+      }
+
+      localStorage.setItem("user_" + user, JSON.stringify({ password: pass, highScore: 0 }));
+      alert("Đăng ký thành công! Hãy đăng nhập.");
+    }
+
+    function login() {
+      const user = document.getElementById("username").value.trim();
+      const pass = document.getElementById("password").value.trim();
+      if (!user || !pass) return alert("Nhập đủ tài khoản và mật khẩu!");
+
+      const data = localStorage.getItem("user_" + user);
+      if (!data) {
+        alert("Chưa có tài khoản, hãy đăng ký!");
+        return;
+      }
+
+      const userData = JSON.parse(data);
+      if (userData.password !== pass) {
+        alert("Sai mật khẩu!");
+        return;
+      }
+
+      currentUser = user;
+      document.getElementById("login").style.display = "none";
+      document.getElementById("menu").style.display = "block";
+      document.getElementById("welcome").innerText = "Xin chào, " + user;
+      loadHighScore();
+    }
+
+    function loadHighScore() {
+      if (!currentUser) return;
+      const data = JSON.parse(localStorage.getItem("user_" + currentUser));
+      document.getElementById("highScore").innerText = data.highScore;
+    }
+
+    function saveHighScore() {
+      if (!currentUser) return;
+      const data = JSON.parse(localStorage.getItem("user_" + currentUser));
+      if (score > data.highScore) {
+        data.highScore = score;
+        localStorage.setItem("user_" + currentUser, JSON.stringify(data));
+        loadHighScore();
+      }
+    }
+
+    // ============ GAME ============
+    function startGame() {
+      document.getElementById("menu").style.display = "none";
+      canvas.style.display = "block";
+
+      bird = { x: 50, y: 150, width: 20, height: 20, gravity: 0.6, lift: -10, velocity: 0 };
+      pipes = [];
+      frame = 0;
+      score = 0;
+
+      update();
+    }
+
+    function drawBird() {
+      ctx.fillStyle = "yellow";
+      ctx.fillRect(bird.x, bird.y, bird.width, bird.height);
+    }
+
+    function drawPipes() {
+      ctx.fillStyle = "green";
+      for (let p of pipes) {
+        ctx.fillRect(p.x, 0, p.width, p.top);
+        ctx.fillRect(p.x, canvas.height - p.bottom, p.width, p.bottom);
+      }
+    }
+
+    function drawScore() {
+      ctx.fillStyle = "black";
+      ctx.font = "24px Arial";
+      ctx.fillText("Score: " + score, 10, 30);
+    }
+
+    function update() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      bird.velocity += bird.gravity;
+      bird.y += bird.velocity;
+
+      if (bird.y + bird.height > canvas.height || bird.y < 0) {
+        gameOver();
+        return;
+      }
+
+      if (frame % 90 === 0) {
+        let pipeHeight = Math.floor(Math.random() * 200) + 50;
+        let gap = 120;
+        pipes.push({
+          x: canvas.width,
+          width: 40,
+          top: pipeHeight,
+          bottom: canvas.height - pipeHeight - gap
+        });
+      }
+
+      for (let i = pipes.length - 1; i >= 0; i--) {
+        let p = pipes[i];
+        p.x -= pipeSpeed;
+
+        if (bird.x < p.x + p.width &&
+            bird.x + bird.width > p.x &&
+            (bird.y < p.top || bird.y + bird.height > canvas.height - p.bottom)) {
+          gameOver();
+          return;
+        }
+
+        if (p.x + p.width < 0) {
+          pipes.splice(i, 1);
+          score++;
+        }
+      }
+
+      drawBird();
+      drawPipes();
+      drawScore();
+
+      frame++;
+      requestAnimationFrame(update);
+    }
+
+    function gameOver() {
+      saveHighScore();
+      alert("Game Over! Điểm của bạn: " + score);
+      canvas.style.display = "none";
+      document.getElementById("menu").style.display = "block";
+    }
+
+    document.addEventListener("keydown", () => {
+      bird.velocity = bird.lift;
+    });
+
+    // ============ CÀI ĐẶT ============
+    function openSettings() {
+      document.getElementById("menu").style.display = "none";
+      document.getElementById("settings").style.display = "block";
+    }
+
+    function saveSettings() {
+      pipeSpeed = parseInt(document.getElementById("pipeSpeed").value);
+      if (isNaN(pipeSpeed) || pipeSpeed <= 0) pipeSpeed = 2;
+      alert("Đã lưu cài đặt!");
+    }
+
+    function backMenu() {
+      document.getElementById("settings").style.display = "none";
+      document.getElementById("menu").style.display = "block";
+    }
+  </script>
+</body>
+</html>
